@@ -1,0 +1,1637 @@
+---
+title: "Trust of Information about Tobacco and E-Cigarettes from Health Professionals versus Tobacco or Electronic Cigarette Companies"
+author: "Vincent"
+date: "2025-04-11"
+output: html_document
+---
+
+
+```{r Import dataset, warning = FALSE, message = FALSE}
+
+# Build packages
+required_pkgs <- c("haven", "dplyr", "survey", "flextable", "officer")
+for (pkg in required_pkgs) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+  library(pkg, character.only = TRUE)
+}
+
+# Import dataset
+raw <- read_dta("C:/Users/m1810/Desktop/Paper/HINTS/Hints_fda_09052017_public.dta")
+
+```
+
+```{r Variables Construction, warning = FALSE, message = FALSE}
+
+#### Cook the raw data --------------------------------------------------
+
+
+# Select and rename variables
+raw_sel <- raw %>% 
+	select(
+	  stratum,
+	  starts_with("person_"),
+	  raceethn,
+	  educa,
+	  selfgender,
+	  incomeranges,
+	  age,
+	  ruc2013,
+	  smoke100,
+	  smokenow,
+	  tobaccotried_ecig,
+	  starts_with("tobaccotrust"),
+	  starts_with("ecigtrust")
+	  ) %>%
+  rename(
+    weight = person_finwt0,
+    race = raceethn,
+    edu = educa,
+    income = incomeranges,
+    gender = selfgender,
+    geographic_area = ruc2013
+    ) %>%
+  mutate(
+    
+    # Age
+    age = replace(age, age < 0, NA),
+    
+    # Race
+    race = ifelse(race == 2, 0, 1),
+    
+    # Education
+    education = case_when(
+      edu == 2 | edu == 1 ~ 1,
+      edu > 2 ~ 0
+    ),
+    
+    # Gender
+    gender = case_when(
+      gender == 1 ~ 1,
+      gender == 2 ~ 0
+    ),
+    
+    # Income
+    income = case_when(
+      income == 1 | income == 2 | income == 3 ~ 1,
+      income > 3 ~ 0
+    ),
+    
+    # Geographic area
+    geographic_area = ifelse(geographic_area < 4, 0, 1),
+    
+    # Tobacco trust
+    # Substep 1: clean
+    tobaccotrustdoctor = replace(
+      tobaccotrustdoctor,
+      tobaccotrustdoctor == -9 | tobaccotrustdoctor == -5,
+      NA
+      ),
+    tobaccotrustgovhealth = replace(
+      tobaccotrustgovhealth,
+      tobaccotrustgovhealth == -9 | tobaccotrustgovhealth == -5,
+      NA
+      ),
+    tobaccotrusthealthorgs = replace(
+      tobaccotrusthealthorgs,
+      tobaccotrusthealthorgs == -9 | tobaccotrusthealthorgs == -5,
+      NA
+      ),
+    tobaccotrusttobaccoco = replace(
+      tobaccotrusttobaccoco,
+      tobaccotrusttobaccoco == -9 | tobaccotrusttobaccoco == -5,
+      NA
+      ),
+    
+    # Substep 2: recode
+    tobaccotrustdoctor = ifelse(tobaccotrustdoctor == 4, 1,
+                                ifelse(tobaccotrustdoctor == 3, 2,
+                                       ifelse(tobaccotrustdoctor == 2, 3,
+                                              ifelse(tobaccotrustdoctor == 1, 4, NA)))),
+    tobaccotrustgovhealth = ifelse(tobaccotrustgovhealth == 4, 1,
+                                   ifelse(tobaccotrustgovhealth == 3, 2,
+                                          ifelse(tobaccotrustgovhealth == 2, 3,
+                                                 ifelse(tobaccotrustgovhealth == 1, 4, NA)))),
+    tobaccotrusthealthorgs = ifelse(tobaccotrusthealthorgs == 4, 1,
+                                     ifelse(tobaccotrusthealthorgs == 3, 2,
+                                            ifelse(tobaccotrusthealthorgs == 2, 3,
+                                                   ifelse(tobaccotrusthealthorgs == 1, 4, NA)))),
+    tobaccotrusttobaccoco = ifelse(tobaccotrusttobaccoco == 4, 1,
+                                    ifelse(tobaccotrusttobaccoco == 3, 2,
+                                           ifelse(tobaccotrusttobaccoco == 2, 3,
+                                                  ifelse(tobaccotrusttobaccoco == 1, 4, NA)))),
+    
+    # Substep 3: generate 'relative trust'
+    tobacco_rel_trust = ifelse((tobaccotrustdoctor + tobaccotrustgovhealth + tobaccotrusthealthorgs) / 3 <= tobaccotrusttobaccoco, 1, 0),
+    
+    # E-cigarette trust
+    # Substep 1: clean
+    ecigtrustdoctor = replace(ecigtrustdoctor,
+                              ecigtrustdoctor == -9 | ecigtrustdoctor == -5,
+                              NA),
+    ecigtrustgovhealth = replace(ecigtrustgovhealth,
+                                 ecigtrustgovhealth == -9 | ecigtrustgovhealth == -5,
+                                 NA),
+    ecigtrusthealthorgs = replace(ecigtrusthealthorgs,
+                                  ecigtrusthealthorgs == -9 | ecigtrusthealthorgs == -5,
+                                  NA),
+    ecigtrustecigco = replace(ecigtrustecigco,
+                              ecigtrustecigco == -9 | ecigtrustecigco == -5,
+                              NA),
+    
+    # Substep 2: recode
+    ecigtrustdoctor = ifelse(ecigtrustdoctor == 4, 1,
+                              ifelse(ecigtrustdoctor == 3, 2,
+                                     ifelse(ecigtrustdoctor == 2, 3,
+                                            ifelse(ecigtrustdoctor == 1, 4, NA)))),
+    ecigtrustgovhealth = ifelse(ecigtrustgovhealth == 4, 1,
+                                 ifelse(ecigtrustgovhealth == 3, 2,
+                                        ifelse(ecigtrustgovhealth == 2, 3,
+                                               ifelse(ecigtrustgovhealth == 1, 4, NA)))),
+    ecigtrusthealthorgs = ifelse(ecigtrusthealthorgs == 4, 1,
+                                 ifelse(ecigtrusthealthorgs == 3, 2,
+                                        ifelse(ecigtrusthealthorgs == 2, 3,
+                                               ifelse(ecigtrusthealthorgs == 1, 4, NA)))),
+    ecigtrustecigco = ifelse(ecigtrustecigco == 4, 1,
+                                ifelse(ecigtrustecigco == 3, 2,
+                                       ifelse(ecigtrustecigco == 2, 3,
+                                              ifelse(ecigtrustecigco == 1, 4, NA)))),
+  
+  # Substep 3: generate 'relative trust'
+  ecig_rel_trust = ifelse((ecigtrustdoctor + ecigtrustgovhealth + ecigtrusthealthorgs) / 3 <= ecigtrustecigco, 1, 0),
+  
+  # Tobacco related behavior
+  # Substep 1: generate current smoker
+  current_smoker = ifelse(smoke100 == 1 & (smokenow == 1 | smokenow == 2), 1, 0),
+  
+  # Substep 2: generate former smoker
+  former_smoker = ifelse(smoke100 == 1 & smokenow == 3, 1, 0),
+  
+  # Substep 3: generate never smoker
+  never_smoker = ifelse(smoke100 == 2, 1, 0),
+  
+  # Substep 4: generate 'smoking status'
+  smoking_status = ifelse(current_smoker == 1, 1,
+                          ifelse(former_smoker == 1, 2,
+                                 ifelse(never_smoker == 1, 3, NA))),
+  
+  # E-cigarette related behavior
+  ecig_use = ifelse(tobaccotried_ecig == 1, 1,
+                    ifelse(tobaccotried_ecig == 2, 0, NA))
+  )
+
+
+
+
+#### Factorization --------------------------------------------------
+
+raw_sel <- raw_sel %>%
+  mutate(
+    
+    # race
+    race_f = factor(race,
+                    levels = c(1, 0),
+                    labels = c("Minority", "NH-White")),
+    
+    # education
+    education_f = factor(education,
+                         levels = c(0, 1),
+                         labels = c("> High school", "<= High school")),
+    
+    # income
+    income_f = factor(income,
+                      levels = c(0, 1),
+                      labels = c(">= $20,000", "< $20,000")),
+    
+    # gender
+    gender_f = factor(gender,
+                      levels = c(0, 1),
+                      labels = c("Female", "Male")),
+    
+    # geographic area
+    geographic_area_f = factor(geographic_area,
+                               levels = c(0, 1),
+                               labels = c("Metropolitan", "Non-metropolitan")),
+    
+    # E-cigarette relative trust
+    ecig_rel_trust_f = factor(ecig_rel_trust,
+                              levels = c(0, 1),
+                              labels = c("Health professionals more than e-cigarette companies", "E-cigarette companies as much or more than health professionals")),
+    
+    # Tobacco relative trust
+    tobacco_rel_trust_f = factor(tobacco_rel_trust,
+                                 levels = c(0, 1),
+                                 labels = c("Health professionals more than tobacco companies", "Tobacco companies as much or more than health professionals")),
+    
+    # smoking status
+    smoking_status_f = factor(smoking_status,
+                             levels = c(1, 2, 3),
+                             labels = c("Current smoker", "Former smoker", "Never smoker")),
+    
+    # E-cigarette use
+    ecig_use_f = factor(ecig_use,
+                        levels = c(0, 1),
+                        labels = c("Never", "Ever"))
+  )
+
+#### Define Functions --------------------------------------------------
+
+
+# Weighted percentage calculator
+# This function will return you the weighted percentage for data frame 'df' when the column 'col' equals to value 'value'
+# Formal parameter 'df' for data frame, 'col' for column name (string) and 'value' for the column value
+wpc_calculator <- function(df, col, value) {
+  
+  # Remove missing values
+  df <- df[!is.na(df[[col]]), ]
+  
+  # Calculation
+  weighted_percentage <- round(
+    sum((df[[col]] == value) * df[["weight"]]) / sum(df[["weight"]]) * 100,
+    1
+  )
+  
+  # Return the result
+  return(weighted_percentage)
+}
+
+
+
+```
+
+```{r Table 1, warning = FALSE, message = FALSE}
+
+
+#### Data frame preparation --------------------------------------------------
+
+
+# Generate initial data frame
+# Substep 1: generate column names
+col_names <- c(
+  "characteristics",
+  "total",
+  "health_prof_more_than_tobacco",
+  "tobacco_company_more",
+  "p_value_tobacco",
+  "health_prof_more_than_ecig",
+  "ecig_company_more",
+  "p_value_ecig"
+)
+
+# Substep 2: update column names and name the data frame
+table_1 <- data.frame(
+  
+  # 17 rows and 8 colemns
+  matrix(NA, nrow = 17, ncol = 8)
+  )
+
+colnames(table_1) <- col_names
+
+# Substep 3: add row names
+table_1$characteristics <- c(
+  "Demographics",
+  "Race / ethnicity",
+  "Racial / ethnicminority",
+  "Non-Hispanic White",
+  "Education",
+  "≤ HighSchool",
+  "> HighSchool",
+  "Income",
+  "< $20000",
+  "≥ $20000",
+  "Gender",
+  "Male",
+  "Female",
+  "Geographic area",
+  "Non-metropolitan",
+  "Metropolitan",
+  "Age (years)"
+)
+
+# Substep 4: add labels to every column
+# Substep 4.1: generate label list
+label_tb1 <- c(
+  "Characteristics",
+  paste("Total, N = ", nrow(raw_sel), ", n (%) or M (SE)"),
+  "Health professionals more than tobacco companies, n (%) or M (SE)",
+  "Tobacco companies as much or more than health professionals, n (%) or M (SE)",
+  "p - Value",
+  "Health professionals more than e-cigarette companies, n (%) or M (SE)",
+  "E-cigarette companies as much or more than health professionals, n (%) or M (SE)",
+  "p - Value"
+)
+
+# Substep 4.2: add labels
+for(i in 1:8) {
+  attr(table_1[, i], "label") <- label_tb1[i]
+}
+
+# Generate survey design object
+hints_survey <- svrepdesign(
+  
+  # Data frame
+  data = raw_sel,
+  
+  # Assign weights
+  weights = ~ weight,
+  
+  # Assign
+  repweights = select(raw_sel, num_range("person_finwt", 1:50)),
+  
+  # Jackknife type
+  type = "JK1",
+  
+  # Combined weights
+  combined.weights = TRUE,
+)
+
+
+
+
+#### Chi-squared tests for categorical variables --------------------------------------------------
+
+
+# Generate demographic list
+demographics <- c("race", "education", "income", "gender", "geographic_area")
+
+
+# Calculation
+for(i in 1:5){
+  
+  # Column ---- Total number of observations and weighted percentages
+  # Subgroup 1
+  table_1[i * 3, "total"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 1, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel, demographics[i], 1),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_1[i * 3 + 1, "total"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 0, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel, demographics[i], 0),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- Tobacco relative trust: trust information from health professionals more than tobacco companies
+  # Subgroup 1
+  table_1[i * 3, "health_prof_more_than_tobacco"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$tobacco_rel_trust == 0, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "tobacco_rel_trust", 0),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_1[i * 3 + 1, "health_prof_more_than_tobacco"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$tobacco_rel_trust == 0, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "tobacco_rel_trust", 0),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- Tobacco relative trust: trust information from tobacco companies as much or more than health professionals
+  # Subgroup: 1
+  table_1[i * 3, "tobacco_company_more"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$tobacco_rel_trust == 1, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "tobacco_rel_trust", 1),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup: 2
+  table_1[i * 3 + 1, "tobacco_company_more"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$tobacco_rel_trust == 1, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "tobacco_rel_trust", 1),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- p value of tobacco-related relative trust
+  table_1[i * 3, "p_value_tobacco"] <- round(
+    
+    # Chi-squared test
+    svychisq(
+      
+      # Reformulate formula
+      reformulate(termlabels = c(demographics[i], "tobacco_rel_trust"), response = NULL),
+      
+      # Assign survey design
+      design = hints_survey,
+      
+      # F statistic
+      statistic = "F"
+      )$p.value,
+    4
+    )
+  
+
+  # Column ---- E-cigarette relative trust: trust information from health professionals more than e-cigarette companies
+  # Subgroup 1
+  table_1[i * 3, "health_prof_more_than_ecig"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$ecig_rel_trust == 0, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "ecig_rel_trust", 0),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_1[i * 3 + 1, "health_prof_more_than_ecig"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$ecig_rel_trust == 0, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "ecig_rel_trust", 0),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- E-cigarette relative trust: trust information from e-cigarette companies as much or more than health professionals
+  # Subgroup 1
+  table_1[i * 3, "ecig_company_more"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$ecig_rel_trust == 1, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "ecig_rel_trust", 1),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_1[i * 3 + 1, "ecig_company_more"] <- paste(
+    
+    # Total number of observation
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$ecig_rel_trust == 1, na.rm = TRUE),
+    " (",
+    
+    # Weighted percentage
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "ecig_rel_trust", 1),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- p value of e-cigarette-related relative trust
+  table_1[i * 3, "p_value_ecig"] <- round(
+    
+    # Chi-squared test
+    svychisq(
+      
+      # Reformulate formula
+      reformulate(termlabels = c(demographics[i], "ecig_rel_trust"), response = NULL),
+      
+      # Assign survey
+      design = hints_survey,
+      
+      # F statistics
+      statistic = "F",)$p.value,
+    4
+    )
+}
+
+
+
+
+#### T tests for continuous variables --------------------------------------------------
+
+
+# Column ---- Total number of observations and weighted percentages
+# Age
+table_1[17, "total"] <- paste(
+  
+  # Weighted mean
+  round(svymean(~ age, design = hints_survey, na.rm = TRUE), 1),
+  " (",
+  
+  # Weighted SE
+  round(SE(svymean(~ age, design = hints_survey, na.rm = TRUE)), 2),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- Tobacco relative trust: trust information from health professionals more than tobacco companies
+# Age
+design <- svrepdesign(
+  
+  # Data filtering
+  data = raw_sel %>% filter(tobacco_rel_trust == 0),
+  
+  # Assign weight
+  weights = ~ weight,
+  
+  # Assign repeated weights
+  repweights = select(raw_sel %>% filter(tobacco_rel_trust == 0), starts_with("person_")),
+  
+  # Weights type
+  type = "JK1",
+  
+  # Combine weights
+  combined.weights = TRUE,
+)
+  
+table_1[17, "health_prof_more_than_tobacco"] <- paste(
+  
+  # Weighted mean
+  round(svymean(~ age, design = design, na.rm = TRUE), 1),
+  " (",
+  
+  # Weighted SE
+  round(SE(svymean(~ age, design = design, na.rm = TRUE)), 2),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- Tobacco relative trust: trust information from tobacco companies as much or more than health professionals
+# Age
+design <- svrepdesign(
+  
+  # Data filtering
+  data = raw_sel %>% filter(tobacco_rel_trust == 1),
+  
+  # Assign weight
+  weights = ~ weight,
+  
+  # Assign repeated weights
+  repweights = select(raw_sel %>% filter(tobacco_rel_trust == 1), starts_with("person_")),
+  
+  # Weights type
+  type = "JK1",
+  
+  # Combine weights
+  combined.weights = TRUE,
+)
+  
+table_1[17, "tobacco_company_more"] <- paste(
+  
+  # Weighted mean
+  round(svymean(~ age, design = design, na.rm = TRUE), 1),
+  " (",
+  
+  # Weighted SE
+  round(SE(svymean(~ age, design = design, na.rm = TRUE)), 2),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- p value of tobacco-related relative trust
+# Age
+table_1[17, "p_value_tobacco"] <- round(svyttest(
+  
+  # Formula
+  age ~ tobacco_rel_trust,
+  
+  # Design
+  design = hints_survey
+  )$p.value,
+  4
+)
+
+
+# Column ---- E-cigarette relative trust: trust information from health professionals more than e-cigarette companies
+# Age
+design <- svrepdesign(
+  
+  # Data filtering
+  data = raw_sel %>% filter(ecig_rel_trust == 0),
+  
+  # Assign weight
+  weights = ~ weight,
+  
+  # Assign repeated weights
+  repweights = select(raw_sel %>% filter(ecig_rel_trust == 0), starts_with("person_")),
+  
+  # Weights type
+  type = "JK1",
+  
+  # Combine weights
+  combined.weights = TRUE,
+)
+  
+table_1[17, "health_prof_more_than_ecig"] <- paste(
+  
+  # Weighted mean
+  round(svymean(~ age, design = design, na.rm = TRUE), 1),
+  " (",
+  
+  # Weighted SE
+  round(SE(svymean(~ age, design = design, na.rm = TRUE)), 2),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- E-cigarette relative trust: trust information from e-cigarette companies as much or more than health professionals
+# Age
+design <- svrepdesign(
+  
+  # Data filtering
+  data = raw_sel %>% filter(ecig_rel_trust == 1),
+  
+  # Weights
+  weights = ~ weight,
+  
+  # Repeated weights
+  repweights = select(raw_sel %>% filter(ecig_rel_trust == 1), starts_with("person_")),
+  
+  # Weights type
+  type = "JK1",
+  
+  # Combine weights
+  combined.weights = TRUE,
+)
+  
+table_1[17, "ecig_company_more"] <- paste(
+  
+  # Weighted mean
+  round(svymean(~ age, design = design, na.rm = TRUE), 1),
+  " (",
+  
+  # Weighted SE
+  round(SE(svymean(~ age, design = design, na.rm = TRUE)), 2),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- p value of e-cigarette-related relative trust
+# Age
+table_1[17, "p_value_ecig"] <- round(svyttest(
+  
+  # Formula
+  age ~ ecig_rel_trust,
+  
+  # Design
+  design = hints_survey
+  )$p.value, 
+  4
+)
+
+
+
+
+#### Generate and modify flex table --------------------------------------------------
+
+
+flextable_1 <- table_1 %>%
+  
+  # Transform to flextable
+  flextable() %>%
+  
+  # Add title
+  set_caption(
+    caption = as_paragraph(
+      as_chunk("Table 1. ",
+               props = fp_text(
+                 bold = TRUE,
+                 color = "#0A0D79"
+                 )
+               ),
+      as_chunk("Differences in tobacco-related and E-cigarette-related relative trust by demographics.")
+      ),
+    align_with_table = FALSE
+    ) %>%
+  
+  # Add footnote
+  add_footer_lines("Note: Weighted percentages, means, and standard errors are presented. Data from the Health Information National Trends Survey-FDA Cycle.") %>%
+  
+  # Add header rows 'Trust information from:'
+  add_header_row(
+    values = c(
+      "",
+      "Trust information from:",
+      "",
+      "Trust information from:",
+      ""
+      ),
+    colwidths = c(2, 2, 1, 2, 1)
+    ) %>%
+  
+  # Add header rows 'Tobacco-related relative trust' and 'E-cigarette-related relative trust'
+  add_header_row(
+    values = c(
+      "",
+      paste("Tobacco-related relative trust, n =", sum(!is.na(raw_sel$tobacco_rel_trust))),
+      paste("E-cigarette-related relative trust, n =", sum(!is.na(raw_sel$ecig_rel_trust)))),
+    colwidths = c(2, 3, 3)) %>%
+  
+  # Remove all borders
+  border_remove() %>%
+  
+  # Add horizontal lines inside the headers
+  hline(
+    i = 1, 
+    j = 3:5, 
+    border = fp_border(color = "#0A0D79", width = 2),
+    part = "header"
+  ) %>%
+  
+  hline(
+    i = 1, 
+    j = 6:8, 
+    border = fp_border(color = "#0A0D79", width = 2),
+    part = "header"
+  ) %>%
+  
+  hline(
+    i = 2, 
+    j = 3:4, 
+    border = fp_border(color = "#0A0D79", width = 2),
+    part = "header"
+  ) %>%
+  
+  hline(
+    i = 2, 
+    j = 6:7, 
+    border = fp_border(color = "#0A0D79", width = 2),
+    part = "header"
+  ) %>%
+  
+  # Add horizontal line on the top of the header
+  hline_top(border = fp_border(color = "#0A0D79", width = 2), part = "header") %>%
+  
+  # Add horizontal line on the top of the body
+  hline_top(border = fp_border(color = "#0A0D79", width = 2), part = "body") %>%
+  
+  # Add horizontal line on the bottom of the body
+  hline_bottom(border = fp_border(color = "#0A0D79", width = 2), part = "body") %>%
+  
+  # Modify alignment
+  align(align = "center", i = 1:3, j = 2:8, part = "header") %>%
+  align(align = "right", i = 1:17, j = 2:8, part = "body") %>%
+  
+  # Set paddings
+  padding(
+    i = c(3, 4, 6, 7, 9, 10, 12, 13, 15, 16),
+    j = 1,
+    padding.left = 20,
+    part = "body"
+  ) %>%
+  
+  # Set line spacing
+  line_spacing(part = "header", space = 1.5) %>%
+  
+  # Set all fonts to 'Calibri'
+  font(fontname = "Adora", part = "all") %>%
+  
+  # Set 'Demographic' to italic
+  italic(i = 1, part = "body") %>%
+  
+  # Auto fit column width
+  autofit()
+
+
+
+
+#### Display table 1  --------------------------------------------------
+
+flextable_1
+
+```
+
+```{r Table 2, warning = FALSE, message = FALSE}
+
+
+#### Data frame preparation --------------------------------------------------
+
+
+# Generate initial data frame
+# Substep 1: generate column names
+col_names <- c(
+  "characteristics",
+  "tobacco_current",
+  "tobacco_former",
+  "tobacco_never",
+  "p_value_tobacco",
+  "ecig_ever",
+  "ecig_never",
+  "p_value_ecig"
+)
+
+# Substep 2: update column names and name the data frame
+table_2 <- data.frame(
+  
+  # 24 rows and 8 columns
+  matrix(NA, nrow = 24, ncol = 8)
+)
+
+colnames(table_2) <- col_names
+
+# Substep 3: add row names
+table_2$characteristics <- c(
+  "Relative trust",
+  "Tobacco-related relative trust",
+  "Trust health professionals more than tobacco companies",
+  "Trust tobacco companies as much or more than health professionals",
+  "E-cigarette-related relative trust",
+  "Trust health professionals more than e-cigarette companies",
+  "Trust e-cigarette companies as much or more than health professionals",
+  "Demographics",
+  "Race / ethnicity",
+  "Racial / ethnicminority",
+  "Non-Hispanic White",
+  "Education",
+  "≤ HighSchool",
+  "> HighSchool",
+  "Income",
+  "< $20000",
+  "≥ $20000",
+  "Gender",
+  "Male",
+  "Female",
+  "Geographic area",
+  "Non-metropolitan",
+  "Metropolitan",
+  "Age (years)"
+)
+
+# Substep 4: add labels to every column
+# Substep 4.1: generate label list
+label_tb2 <- c(
+  "Characteristics",
+  "Current, n (%) or M (SE)",
+  "Former, n (%) or M (SE)",
+  "Never, n (%) or M (SE)",
+  "p - Value",
+  "Ever, n (%) or M (SE)",
+  "Never, n (%) or M (SE)",
+  "p - Value"
+)
+
+# Substep 4.2: add labels
+for(i in 1:8) {
+  attr(table_2[, i], "label") <- label_tb2[i]
+}
+
+
+
+
+#### Chi-squared tests for categorical variables --------------------------------------------------
+
+
+# Relative trust
+# Column ---- Smoking status: current smoker
+# Subgroup 1
+table_2[3, "tobacco_current"] <- paste(
+  sum(raw_sel$smoking_status == 1 & raw_sel$tobacco_rel_trust == 0, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["tobacco_rel_trust"] == 0), "smoking_status", 1),
+  ")",
+  sep = ""
+)
+
+# Subgroup 2
+table_2[4, "tobacco_current"] <- paste(
+  sum(raw_sel$smoking_status == 1 & raw_sel$tobacco_rel_trust == 1, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["tobacco_rel_trust"] == 1), "smoking_status", 1),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- Smoking status: former smoker
+# Subgroup 1
+table_2[3, "tobacco_former"] <- paste(
+  sum(raw_sel$smoking_status == 2 & raw_sel$tobacco_rel_trust == 0, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["tobacco_rel_trust"] == 0), "smoking_status", 2),
+  ")",
+  sep = ""
+)
+
+# Subgroup 2
+table_2[4, "tobacco_former"] <- paste(
+  sum(raw_sel$smoking_status == 2 & raw_sel$tobacco_rel_trust == 1, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["tobacco_rel_trust"] == 1), "smoking_status", 2),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- Smoking status: never smoker
+# Subgroup 1
+table_2[3, "tobacco_never"] <- paste(
+  sum(raw_sel$smoking_status == 3 & raw_sel$tobacco_rel_trust == 0, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["tobacco_rel_trust"] == 0), "smoking_status", 3),
+  ")",
+  sep = ""
+)
+
+# Subgroup 2
+table_2[4, "tobacco_never"] <- paste(
+  sum(raw_sel$smoking_status == 3 & raw_sel$tobacco_rel_trust == 1, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["tobacco_rel_trust"] == 1), "smoking_status", 3),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- p value of smoking status
+table_2[3, "p_value_tobacco"] <- round(
+    svychisq(
+      
+      # Formula
+      ~ tobacco_rel_trust_f + smoking_status_f,
+      
+      # Design
+      design = hints_survey,
+      statistic = "F"
+      )$p.value,
+    4
+    )
+
+
+# Column ---- E-cigarette use: ever smoker
+# Subgroup 1
+table_2[6, "ecig_ever"] <- paste(
+  sum(raw_sel$ecig_use == 1 & raw_sel$ecig_rel_trust == 0, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["ecig_rel_trust"] == 0), "ecig_use", 1),
+  ")",
+  sep = ""
+)
+
+# Subgroup 2
+table_2[7, "ecig_ever"] <- paste(
+  sum(raw_sel$ecig_use == 1 & raw_sel$ecig_rel_trust == 1, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["ecig_rel_trust"] == 1), "ecig_use", 1),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- E-cigarette use: never smoker
+# Subgroup 1
+table_2[6, "ecig_never"] <- paste(
+  sum(raw_sel$ecig_use == 0 & raw_sel$ecig_rel_trust == 0, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["ecig_rel_trust"] == 0), "ecig_use", 0),
+  ")",
+  sep = ""
+)
+
+# Subgroup 2
+table_2[7, "ecig_never"] <- paste(
+  sum(raw_sel$ecig_use == 0 & raw_sel$ecig_rel_trust == 1, na.rm = TRUE),
+  " (",
+  wpc_calculator(raw_sel %>% filter(raw_sel["ecig_rel_trust"] == 1), "ecig_use", 0),
+  ")",
+  sep = ""
+)
+
+
+# Column ---- p value of e-cigarette use
+table_2[6, "p_value_ecig"] <- round(
+    svychisq(
+      
+      # Formula
+      ~ ecig_rel_trust_f + ecig_use_f,
+      
+      # Design
+      design = hints_survey,
+      statistic = "F"
+      )$p.value,
+    4
+    )
+
+
+# Demographics
+for(i in 1:5){
+  
+  # Column ---- Smoking status: current smoker
+  # Subgroup 1
+  table_2[(i + 2) * 3 + 1, "tobacco_current"] <- paste(
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$smoking_status == 1, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "smoking_status", 1),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_2[(i + 2) * 3 + 2, "tobacco_current"] <- paste(
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$smoking_status == 1, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "smoking_status", 1),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- Smoking status: former smoker
+  # Subgroup 1
+  table_2[(i + 2) * 3 + 1, "tobacco_former"] <- paste(
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$smoking_status == 2, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "smoking_status", 2),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_2[(i + 2) * 3 + 2, "tobacco_former"] <- paste(
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$smoking_status == 2, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "smoking_status", 2),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- Smoking status: never smoker
+  # Subgroup 1
+  table_2[(i + 2) * 3 + 1, "tobacco_never"] <- paste(
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$smoking_status == 3, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "smoking_status", 3),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_2[(i + 2) * 3 + 2, "tobacco_never"] <- paste(
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$smoking_status == 3, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "smoking_status", 3),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- p value of tobacco-related relative trust
+  table_2[(i + 2) * 3 + 1, "p_value_tobacco"] <- round(
+    svychisq(
+      reformulate(termlabels = c(demographics[i], "smoking_status_f"), response = NULL),
+      design = hints_survey,
+      statistic = "F"
+      )$p.value,
+    4
+    )
+  
+
+
+  # Column ---- E-cigarette relative trust: trust information from health professionals more than e-cigarette companies
+  # Subgroup 1
+  table_2[(i + 2) * 3 + 2, "ecig_ever"] <- paste(
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$ecig_use == 1, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "ecig_use", 1),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_2[(i + 2) * 3 + 1, "ecig_ever"] <- paste(
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$ecig_use == 1, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "ecig_use", 1),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- E-cigarette relative trust: trust information from e-cigarette companies as much or more than health professionals
+  # Subgroup 1
+  table_2[(i + 2) * 3 + 1, "ecig_never"] <- paste(
+    sum(raw_sel[demographics[i]] == 1 & raw_sel$ecig_use == 1, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 1), "ecig_use", 0),
+    ")",
+    sep = ""
+  )
+
+  # Subgroup 2
+  table_2[(i + 2) * 3 + 2, "ecig_never"] <- paste(
+    sum(raw_sel[demographics[i]] == 0 & raw_sel$ecig_use == 1, na.rm = TRUE),
+    " (",
+    wpc_calculator(raw_sel %>% filter(raw_sel[demographics[i]] == 0), "ecig_use", 0),
+    ")",
+    sep = ""
+  )
+
+
+  # Column ---- p value of e-cigarette-related relative trust
+  
+  
+  
+  
+  table_2[(i + 2) * 3 + 1, "p_value_ecig"] <- round(
+    svychisq(
+      reformulate(termlabels = c(demographics[i], "ecig_use_f"), response = NULL),
+      design = hints_survey,
+      statistic = "F"
+      )$p.value,
+    4
+  )
+}
+
+
+
+
+
+
+
+#### One-way analysis of variance (ANOVA) --------------------------------------------------
+
+
+# Tobacco smoking status
+# Substep 1: Generate column names
+col_names <- c("tobacco_current", "tobacco_former", "tobacco_never")
+
+# Substep 2: Calculation
+for(i in 1:3){
+  
+  # Update design
+  design <- svrepdesign(
+    
+    # data filtration
+    data = raw_sel %>% filter(smoking_status == i),
+  
+    # Assign weights
+    weights = ~ weight,
+  
+    # Assign replicated weights
+    repweights = select(raw_sel %>% filter(smoking_status == i), starts_with("person_")),
+  
+    # Weights type
+    type = "JK1",
+  
+    # Combine weights
+    combined.weights = TRUE,
+  )
+
+  # Assign values
+  table_2[24, col_names[i]] <- paste(
+  
+    # Mean
+    round(svymean(~ age, design = design, na.rm = TRUE), 1),
+    " (",
+  
+    # Standard error
+    round(SE(svymean(~ age, design = design, na.rm = TRUE)), 2),
+    ")",
+    sep = ""
+  )
+}
+
+# Substep 3: one-way analysis of variance (ANOVA)
+table_2[24, "p_value_tobacco"] <- round(
+  
+  # Statistical test
+  regTermTest(
+    
+    # GLM regression
+    svyglm(
+      
+      # Formula
+      age ~ factor(smoking_status),
+      
+      # Set design
+      design = hints_survey
+      ),
+    
+    # Set factor
+    ~ factor(smoking_status),
+    
+    # Set method
+    method = "Wald")$p,
+  4
+)
+
+
+# Ecigarette use status
+# Substep 1: Generate column names
+col_names <- c("ecig_never", "ecig_ever")
+
+# Substep 2: Calculation
+for(i in 1:2){
+  
+  # Update design
+  design <- svrepdesign(
+    
+    # data filtration
+    data = raw_sel %>% filter(ecig_use == i - 1),
+  
+    # Assign weights
+    weights = ~ weight,
+  
+    # Assign replicated weights
+    repweights = select(raw_sel %>% filter(ecig_use == i - 1), starts_with("person_")),
+  
+    # Weights type
+    type = "JK1",
+  
+    # Combine weights
+    combined.weights = TRUE,
+  )
+
+  # Assign values
+  table_2[24, col_names[i]] <- paste(
+  
+    # Mean
+    round(svymean(~ age, design = design, na.rm = TRUE), 1),
+    " (",
+  
+    # Weighted SE
+    round(SE(svymean(~ age, design = design, na.rm = TRUE)), 2),
+    ")",
+    sep = ""
+  )
+}
+
+
+# Substep 3: one-way analysis of variance (ANOVA)
+table_2[24, "p_value_ecig"] <- round(
+  
+  # Statistical test
+  regTermTest(
+    
+    # GLM regression
+    svyglm(
+      
+      # Formula
+      age ~ factor(ecig_use),
+      
+      # Set design
+      design = hints_survey
+      ),
+    
+    # Set factor
+    ~ factor(ecig_use),
+    
+    # Set method
+    method = "Wald")$p,
+  4
+)
+
+
+# N/A
+table_2[6:7, "tobacco_current"] <- "N / A"
+table_2[6:7, "tobacco_former"] <- "N / A"
+table_2[6:7, "tobacco_never"] <- "N / A"
+table_2[3:4, "ecig_ever"] <- "N / A"
+table_2[3:4, "ecig_never"] <- "N / A"
+
+
+#### Generate and modify flex table --------------------------------------------------
+
+
+flextable_2 <- table_2 %>%
+  
+  # Transform to flextable
+  flextable() %>%
+  
+  # Add title
+  set_caption(
+    caption = as_paragraph(
+      as_chunk("Table 2. ",
+               props = fp_text(
+                 bold = TRUE,
+                 color = "#0A0D79"
+                 )
+               ),
+      as_chunk("Differences in smoking status and E-cigarette use by relative trust and demographics.")
+      ),
+    align_with_table = FALSE
+    ) %>%
+  
+  # Add footnote
+  add_footer_lines("Note: Weighted percentages, means, and standard errors are presented. Data from the Health Information National Trends Survey-FDA Cycle.") %>%
+  
+  # Add header rows 'Tobacco-related relative trust' and 'E-cigarette-related relative trust'
+  add_header_row(
+    values = c(
+      "",
+      paste("Smoking Status, n =", sum(!is.na(raw_sel$smoking_status))),
+      paste("Smoking Status, n =", sum(!is.na(raw_sel$ecig_use)))),
+    colwidths = c(1, 4, 3)) %>%
+  
+  # Remove all borders
+  border_remove() %>%
+  
+  # Add horizontal lines inside the headers
+  hline(
+    i = 1, 
+    j = 2:8, 
+    border = fp_border(color = "#0A0D79", width = 2),
+    part = "header"
+  ) %>%
+  
+  # Add horizontal line on the top of the header
+  hline_top(border = fp_border(color = "#0A0D79", width = 2), part = "header") %>%
+  
+  # Add horizontal line on the top of the body
+  hline_top(border = fp_border(color = "#0A0D79", width = 2), part = "body") %>%
+  
+  # Add horizontal line on the bottom of the body
+  hline_bottom(border = fp_border(color = "#0A0D79", width = 2), part = "body") %>%
+  
+  # Modify alignment
+  align(align = "center", i = 1:2, j = 2:8, part = "header") %>%
+  align(align = "right", i = 1:24, j = 2:8, part = "body") %>%
+  
+  # Set paddings
+  padding(
+    i = c(3:4, 6:7, 10:11, 13:14, 16:17, 19:20, 22:23),
+    j = 1,
+    padding.left = 20,
+    part = "body"
+  ) %>%
+  
+  # Set line spacing
+  line_spacing(part = "header", space = 1.5) %>%
+  
+  # Set all fonts to 'Calibri'
+  font(fontname = "Adora", part = "all") %>%
+  
+  # Set 'Demographic' to italic
+  italic(i = 1, part = "body") %>%
+  italic(i = 8, part = "body") %>%
+  
+  # Auto fit column width
+  autofit()
+
+
+
+
+#### Display table 2  --------------------------------------------------
+
+flextable_2
+
+
+
+
+```
+
+```{r Table 3, message = FALSE}
+
+
+#### Data frame preparation --------------------------------------------------
+
+
+# Generate initial data frame
+# Substep 1: generate column names
+col_names <- c(
+  "characteristics",
+  "adj_or"
+)
+
+# Substep 2: update column names and name the data frame
+table_3 <- data.frame(
+  
+  # 19 rows and 2 columns
+  matrix(NA, nrow = 19, ncol = 2)
+)
+
+colnames(table_3) <- col_names
+
+# Substep 3: add row names
+table_3$characteristics <- c(
+  "E-cigarette-related relative trust",
+  "Trust e-cigarette companies as much or more than health professionals",
+  "Trust health professionals more than e-cigarette companies",
+  "Race / ethnicity",
+  "Non-Hispanic White",
+  "Racial / ethnic minority",
+  "Education",
+  "≤ HighSchool",
+  "> HighSchool",
+  "Income",
+  "< $20000",
+  "≥ $20000",
+  "Gender",
+  "Male",
+  "Female",
+  "Geographic area",
+  "Non-metropolitan",
+  "Metropolitan",
+  "Age (years)"
+)
+
+# Substep 4: add labels to every column
+# Substep 4.1: generate label list
+label_tb3 <- c(
+  "Characteristics",
+  "aOR (95% CI)"
+)
+
+# Substep 4.2: add labels
+for(i in 1:2) {
+  attr(table_3[, i], "label") <- label_tb3[i]
+}
+
+
+
+
+#### Multinomial logistic regression --------------------------------------------------
+
+
+# Logistic regression
+glm_result <- svyglm(
+  
+  # Formula
+  ecig_use_f ~ ecig_rel_trust_f + race_f + education_f + income_f + gender_f + geographic_area_f + age,
+  
+  # Assign design
+  design = hints_survey,
+  
+  # Set family
+  family = quasibinomial()
+)
+
+
+# Draw coefficients
+glm_coef <- coef(glm_result)
+
+# Transform to adjusted-OR
+glm_adj_or <- round(exp(glm_coef), digits = 2)
+
+# Calculate Variance-Covariance Matrix for glm result
+glm_vcov_matrix <- vcov(glm_result)
+
+# Calculate the standard error of the OR on the log scale
+glm_log_or_se <- sqrt(diag(glm_vcov_matrix))
+
+# Calculate the 95% CI on the log scale
+glm_ci_lower <- round(exp(glm_coef - 1.96 * glm_log_or_se), digits = 2)
+glm_ci_upper <- round(exp(glm_coef + 1.96 * glm_log_or_se), digits = 2)
+
+# Add to table 3
+for(i in 1:6){
+  
+  # Set 'Reference'
+  table_3$adj_or[i * 3] = "REF"
+  
+  # Set adj-OR and CI
+  table_3$adj_or[i * 3 - 1] = paste(
+    glm_adj_or[i + 1],
+    " (",
+    glm_ci_lower[i + 1],
+    ", ",
+    glm_ci_upper[i + 1],
+    ")",
+    sep = ""
+  )
+  
+  # Set space
+  table_3$adj_or[i * 3 - 2] = NA
+}
+
+table_3$adj_or[19] = paste(
+  
+  # adj-OR
+  glm_adj_or[8],
+  " (",
+  
+  # Lower CI
+  glm_ci_lower[8],
+  ", ",
+  
+  # Higher CI
+  glm_ci_upper[8],
+  ")",
+  sep = ""
+)
+
+
+#### Generate and modify flex table --------------------------------------------------
+
+
+flextable_3 <- table_3 %>%
+  
+  # Transform to flextable
+  flextable() %>%
+  
+  # Add title
+  set_caption(
+    caption = as_paragraph(
+      as_chunk("Table 3. ",
+               props = fp_text(
+                 bold = TRUE,
+                 color = "#0A0D79"
+                 )
+               ),
+      as_chunk("Multivariable binary logistic regression for the association between E-cigarette-related relative trust and E-cigarette use.")
+    ),
+    align_with_table = FALSE
+    ) %>%
+  
+  # Add footnote
+  add_footer_lines("Note: Weighted analyses are presented. Data from the Health Information National Trends Survey-FDA Cycle.") %>%
+  
+  # Add header rows 'Trust information from:'
+  add_header_row(
+    values = c(
+      "",
+      "E-cigarette use"
+    ),
+    colwidths = c(1, 1)
+  ) %>%
+  
+  # Remove all borders
+  border_remove() %>%
+  
+  # Add horizontal lines inside the headers
+  hline(
+    i = 1, 
+    j = 2, 
+    border = fp_border(color = "#0A0D79", width = 2),
+    part = "header"
+  ) %>%
+  
+  # Add horizontal line on the top of the header
+  hline_top(border = fp_border(color = "#0A0D79", width = 2), part = "header") %>%
+  
+  # Add horizontal line on the top of the body
+  hline_top(border = fp_border(color = "#0A0D79", width = 2), part = "body") %>%
+  
+  # Add horizontal line on the bottom of the body
+  hline_bottom(border = fp_border(color = "#0A0D79", width = 2), part = "body") %>%
+  
+  # Modify alignment
+  align(align = "center", i = 1, j = 2, part = "header") %>%
+  align(align = "center",j = 2, part = "body") %>%
+  
+  # Set paddings
+  padding(
+    i = c(2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18),
+    j = 1,
+    padding.left = 20,
+    part = "body"
+  ) %>%
+  
+  # Set line spacing
+  line_spacing(part = "header", space = 1.5) %>%
+  
+  # Set all fonts to 'Calibri'
+  font(fontname = "Adora", part = "all") %>%
+  
+  # Auto fit column width
+  autofit()
+
+
+
+
+#### Display table 1 --------------------------------------------------
+
+flextable_3
+
+```
+
+
+
+
